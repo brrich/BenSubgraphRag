@@ -1,0 +1,9 @@
+**/__pycache__
+wandb
+*.pth
+retrieve/data_files
+model_cache/
+
+kgqa_mvp.ipynb
+gpt_labeled_cwq_raw.jsonl
+retrieve/offline_packages/*.whl

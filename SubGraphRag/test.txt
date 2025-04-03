@@ -1,0 +1,15 @@
+
+
+- got subgraphrag running (just slow af)
+- continued reading more about knowledge graph and uncertainty / building out library for related works
+- also building out my own KG for medical knowledge using like wikiquery and a bunch of open source ones (mostly disease drug interactions)
+
+
+for next time..?
+
+- just add the monte carlo layer 
+- build own knowledge graph completely 
+
+
+
+
