@@ -49,20 +49,10 @@ def eval_epoch(config, device, data_loader, model, mc_samples=10):
         uncertainty_dict['mean_std'].append(std_logits.mean().item())
         uncertainty_dict['max_std'].append(std_logits.max().item())
         
-        # Compute correlation between uncertainty and correctness
-        target_triple_ids = target_triple_probs.nonzero().squeeze(-1)
-        if len(target_triple_ids) > 0:
-            # Create binary correctness tensor (1 for correct triples, 0 for incorrect)
-            correctness = torch.zeros_like(mean_logits)
-            correctness[target_triple_ids] = 1.0
-            
-            # Calculate correlation coefficient between std and correctness
-            if len(std_logits) > 1:  # Need at least 2 samples for correlation
-                corr = torch.corrcoef(torch.stack([std_logits.cpu(), correctness.cpu()]))[0, 1].item()
-                uncertainty_dict['uncertainty_correctness_corr'].append(corr)
-        
-        # Use mean predictions for ranking (alternative: majority vote for ranks)
+        # Use mean predictions for ranking (like in original retriever)
         sorted_triple_ids_pred = torch.argsort(mean_logits, descending=True).cpu()
+        triple_ranks_pred = torch.empty_like(sorted_triple_ids_pred)
+        triple_ranks_pred[sorted_triple_ids_pred] = torch.arange(len(triple_ranks_pred))
         
         target_triple_ids = target_triple_probs.nonzero().squeeze(-1)
         num_target_triples = len(target_triple_ids)
@@ -70,14 +60,22 @@ def eval_epoch(config, device, data_loader, model, mc_samples=10):
         if num_target_triples == 0:
             continue
 
+        # Calculate correlation between uncertainty and correctness
+        correctness = torch.zeros_like(mean_logits)
+        correctness[target_triple_ids] = 1.0
+        if len(std_logits) > 1:  # Need at least 2 samples for correlation
+            corr = torch.corrcoef(torch.stack([std_logits.cpu(), correctness.cpu()]))[0, 1].item()
+            uncertainty_dict['uncertainty_correctness_corr'].append(corr)
+            
         num_total_entities = len(entity_embs) + num_non_text_entities
         for k in config['eval']['k_list']:
+            # Same metrics as in original retriever.py
             recall_k_sample = (
-                sorted_triple_ids_pred[target_triple_ids] < k).sum().item()
+                triple_ranks_pred[target_triple_ids] < k).sum().item()
             metric_dict[f'triple_recall@{k}'].append(
                 recall_k_sample / num_target_triples)
             
-            triple_mask_k = sorted_triple_ids_pred < k
+            triple_mask_k = triple_ranks_pred < k
             entity_mask_k = torch.zeros(num_total_entities)
             entity_mask_k[h_id_tensor[triple_mask_k]] = 1.
             entity_mask_k[t_id_tensor[triple_mask_k]] = 1.
@@ -137,6 +135,10 @@ def main(args):
     config_file = f'configs/retriever/{args.dataset}.yaml'
     config = load_yaml(config_file)
     
+    # Update number of epochs if specified in args
+    if args.num_epochs:
+        config['train']['num_epochs'] = args.num_epochs
+    
     device = torch.device('cuda:0')
     torch.set_num_threads(config['env']['num_threads'])
     set_seed(config['env']['seed'])
@@ -155,12 +157,22 @@ def main(args):
     
     os.makedirs(exp_name, exist_ok=True)
     
-    # Create a log file for metrics
+    # Create a log file for metrics (separate from wandb)
     log_file = os.path.join(exp_name, 'metrics.json')
-    metric_logs = []
 
     train_set = RetrieverDataset(config=config, split='train')
     val_set = RetrieverDataset(config=config, split='val')
+    
+    # Load test set if available
+    try:
+        test_set = RetrieverDataset(config=config, split='test')
+        test_loader = DataLoader(
+            test_set, batch_size=1, collate_fn=collate_retriever)
+        has_test_set = True
+        print(f"Test set loaded with {len(test_set)} samples")
+    except Exception as e:
+        print(f"Warning: Could not load test set: {str(e)}")
+        has_test_set = False
 
     train_loader = DataLoader(
         train_set, batch_size=1, shuffle=True, collate_fn=collate_retriever)
@@ -173,11 +185,58 @@ def main(args):
 
     num_patient_epochs = 0
     best_val_metric = 0
+    
+    # Dictionary to track metrics over time
+    all_metrics = {
+        'train': [],
+        'val': [],
+        'test': [],
+        'uncertainty': [],
+        'epoch_history': {
+            'train_loss': [],
+            'val_recall': [],
+            'test_recall': [] if has_test_set else None
+        }
+    }
+    
     for epoch in range(config['train']['num_epochs']):
         num_patient_epochs += 1
         
+        # Evaluate on validation set using MC dropout
         val_eval_dict, val_uncertainty_dict = eval_epoch(config, device, val_loader, model, args.mc_samples)
         target_val_metric = val_eval_dict['triple_recall@100']
+        
+        # Evaluate on test set if available
+        if has_test_set:
+            print(f"Evaluating on test set (epoch {epoch})...")
+            test_eval_dict, test_uncertainty_dict = eval_epoch(config, device, test_loader, model, args.mc_samples)
+            all_metrics['test'].append({
+                'epoch': epoch,
+                **test_eval_dict
+            })
+            # Track test recall for summary
+            all_metrics['epoch_history']['test_recall'].append({
+                'epoch': epoch,
+                'triple_recall@100': test_eval_dict['triple_recall@100'],
+                'ans_recall@100': test_eval_dict['ans_recall@100']
+            })
+        
+        # Save metrics
+        all_metrics['val'].append({
+            'epoch': epoch,
+            **val_eval_dict
+        })
+        all_metrics['uncertainty'].append({
+            'epoch': epoch,
+            **val_uncertainty_dict
+        })
+        
+        # Track validation recall for summary
+        all_metrics['epoch_history']['val_recall'].append({
+            'epoch': epoch, 
+            'triple_recall@100': val_eval_dict['triple_recall@100'],
+            'ans_recall@100': val_eval_dict['ans_recall@100']
+        })
         
         if target_val_metric > best_val_metric:
             num_patient_epochs = 0
@@ -186,57 +245,90 @@ def main(args):
                 'config': config,
                 'model_state_dict': model.state_dict()
             }
+            best_epoch = epoch
             torch.save(best_state_dict, os.path.join(exp_name, f'cpt.pth'))
 
+            # Log to wandb
             val_log = {'val/epoch': epoch}
             for key, val in val_eval_dict.items():
                 val_log[f'val/{key}'] = val
             for key, val in val_uncertainty_dict.items():
                 val_log[f'val/uncertainty_{key}'] = val
-            
-            # Log both to wandb and locally
             wandb.log(val_log, step=epoch)
             
-            # Save uncertainty metrics to local file
-            log_entry = {
-                'epoch': epoch,
-                'metrics': val_eval_dict,
-                'uncertainty': val_uncertainty_dict
-            }
-            metric_logs.append(log_entry)
-            with open(log_file, 'w') as f:
-                json.dump(metric_logs, f, indent=2)
+            # Also save test metrics at best validation point
+            if has_test_set:
+                best_test_metrics = test_eval_dict
+                best_test_uncertainty = test_uncertainty_dict
+            
+            # Save the current best metrics
+            with open(os.path.join(exp_name, 'best_metrics.json'), 'w') as f:
+                json.dump({
+                    'epoch': epoch,
+                    'metrics': val_eval_dict,
+                    'uncertainty': val_uncertainty_dict,
+                    'test_metrics': test_eval_dict if has_test_set else None
+                }, f, indent=2)
 
+        # Train for one epoch
         train_log_dict = train_epoch(device, train_loader, model, optimizer)
         train_log_dict.update({
             'num_patient_epochs': num_patient_epochs,
             'epoch': epoch
         })
+        
+        # Save training metrics
+        all_metrics['train'].append({
+            'epoch': epoch,
+            **train_log_dict
+        })
+        
+        # Track training loss for summary
+        all_metrics['epoch_history']['train_loss'].append({
+            'epoch': epoch,
+            'loss': train_log_dict['loss']
+        })
+        
+        # Log to wandb
         wandb.log(train_log_dict, step=epoch)
         
-        # Also save training metrics locally
-        train_log_entry = {
-            'epoch': epoch,
-            'train_metrics': train_log_dict
-        }
-        metric_logs.append(train_log_entry)
+        # Save all metrics to file
         with open(log_file, 'w') as f:
-            json.dump(metric_logs, f, indent=2)
+            json.dump(all_metrics, f, indent=2)
+            
+        # Print progress
+        print(f"Epoch {epoch}: train_loss={train_log_dict['loss']:.4f}, val_recall@100={val_eval_dict['triple_recall@100']:.4f}")
+        if has_test_set:
+            print(f"           test_recall@100={test_eval_dict['triple_recall@100']:.4f}")
             
         if num_patient_epochs == config['train']['patience']:
+            print(f"Early stopping triggered after {num_patient_epochs} epochs without improvement")
             break
             
-    # Save final metrics summary
+    # Save final metrics summary with epoch-by-epoch history
     summary_file = os.path.join(exp_name, 'summary.json')
     summary = {
-        'best_epoch': epoch - num_patient_epochs,
-        'best_metric': best_val_metric,
-        'final_uncertainty': val_uncertainty_dict
+        'best_epoch': best_epoch,
+        'num_epochs_trained': epoch + 1,
+        'best_triple_recall@100': best_val_metric,
+        'mc_samples': args.mc_samples,
+        'final_metrics': {
+            'val': val_eval_dict,
+            'test': test_eval_dict if has_test_set else None
+        },
+        'best_metrics': {
+            'val': all_metrics['val'][best_epoch],
+            'test': best_test_metrics if has_test_set else None
+        },
+        'uncertainty': val_uncertainty_dict,
+        'epoch_history': all_metrics['epoch_history']
     }
     with open(summary_file, 'w') as f:
         json.dump(summary, f, indent=2)
         
     print(f"Training complete. Best validation triple_recall@100: {best_val_metric:.4f}")
+    if has_test_set:
+        print(f"Best test triple_recall@100: {best_test_metrics['triple_recall@100']:.4f}")
     print(f"Results saved to {exp_name}")
     print(f"Uncertainty metrics: {json.dumps(val_uncertainty_dict, indent=2)}")
 
@@ -246,8 +338,10 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-d', '--dataset', type=str, required=True, 
                         choices=['webqsp', 'cwq'], help='Dataset name')
-    parser.add_argument('--mc_samples', type=int, default=10, 
-                       help='Number of Monte Carlo dropout forward passes')
+    parser.add_argument('--mc_samples', type=int, default=100, 
+                       help='Number of Monte Carlo dropout forward passes (default: 100)')
+    parser.add_argument('--num_epochs', type=int, default=None,
+                       help='Number of training epochs (overrides config)')
     args = parser.parse_args()
     
     main(args)
