@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+# NOTE: in theory no mods needed for this file for uncertainty evaluation
+
 def main(args):
     pred_dict = torch.load(args.path)
     gpt_triple_dict = torch.load(f'data_files/{args.dataset}/gpt_triples.pth')
