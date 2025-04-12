@@ -1,0 +1,6 @@
+Running on d-14-10-1
+Python location: /home/gridsan/brich/.conda/envs/gte_large_en_v1-5/bin/python
+Python version: Python 3.10.16
+Torch location: /home/gridsan/brich/.conda/envs/gte_large_en_v1-5/lib/python3.10/site-packages/torch/__init__.py
+Downloading train set from rmanluo/RoG-cwq
+done

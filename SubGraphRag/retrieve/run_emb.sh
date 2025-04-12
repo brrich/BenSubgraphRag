@@ -20,6 +20,7 @@ echo "Python location: $(which python)"
 echo "Python version: $(python --version)"
 echo "Torch location: $(python -c 'import torch; print(torch.__file__)' 2>/dev/null || echo "Torch not found")"
 
-python emb.py -d webqsp
+# python emb.py -d webqsp
+python emb.py -d cwq
 echo "done"
 
