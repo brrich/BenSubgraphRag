@@ -40,6 +40,28 @@ def get_dataset(input_file, split, local_dir='data_files/datasets'):
     save_dataset_to_disk(dataset, local_path)
     return dataset
 
+def download_raw_datasets(dataset_name):
+    """Download only the raw datasets without processing them"""
+    print(f"\n🔽 Downloading raw {dataset_name} dataset...")
+    
+    if dataset_name == 'cwq':
+        input_file = os.path.join('rmanluo', 'RoG-cwq')
+    else:
+        input_file = os.path.join('ml1996', 'webqsp')
+    
+    print(f"\n📥 Downloading/checking {dataset_name} dataset from {input_file}...")
+
+    # Load datasets with local caching
+    print("\nDownloading/checking train set...")
+    train_set = get_dataset(input_file, 'train')
+    print("\nDownloading/checking validation set...")
+    val_set = get_dataset(input_file, 'validation')
+    print("\nDownloading/checking test set...")
+    test_set = get_dataset(input_file, 'test')
+    
+    print(f"\n✅ Raw datasets for {dataset_name} have been downloaded or verified")
+    return train_set, val_set, test_set
+
 def check_embedded_datasets(dataset_name, text_encoder_name='gte-large-en-v1.5'):
     """Check if the embedded datasets exist"""
     emb_dir = f'data_files/{dataset_name}/emb/{text_encoder_name}'
@@ -88,12 +110,18 @@ def load_processed_dataset(dataset_name, split):
     with open(processed_path, 'rb') as f:
         return pickle.load(f)
 
-def preview_webqsp(num_examples=5):
+def preview_webqsp(num_examples=5, download_only=False):
     """Preview random examples from WebQSP dataset"""
+    if download_only:
+        download_raw_datasets('webqsp')
+        return None
     return preview_dataset('webqsp', num_examples)
 
-def preview_cwq(num_examples=5):
+def preview_cwq(num_examples=5, download_only=False):
     """Preview random examples from CWQ dataset"""
+    if download_only:
+        download_raw_datasets('cwq')
+        return None
     return preview_dataset('cwq', num_examples)
 
 def preview_dataset(dataset_name, num_examples=5):
@@ -211,14 +239,34 @@ def download_and_process(dataset_name):
 
 def main():
     parser = ArgumentParser('Preview Datasets for SubGraphRag')
-    parser.add_argument('-d', '--dataset', type=str, required=False, 
+    parser.add_argument('-ds', '--dataset', type=str, required=False, 
                         choices=['webqsp', 'cwq', 'both'], default='both',
                         help='Dataset name (default: both)')
     parser.add_argument('-n', '--num_examples', type=int, default=5,
                         help='Number of examples to preview (default: 5)')
+    parser.add_argument('-d', '--download_only', action='store_true',
+                        help='Only download raw datasets without processing or previewing')
     args = parser.parse_args()
     
     print("\n===== SubGraphRag Dataset Preview Tool =====")
+    
+    if args.download_only:
+        print("Running in DOWNLOAD ONLY mode - will only download raw datasets without processing")
+        print(f"Storage path for raw datasets: data_files/datasets/")
+        print("===========================================\n")
+        
+        if args.dataset == 'webqsp' or args.dataset == 'both':
+            print("\n=== WebQSP Raw Dataset Download ===")
+            download_raw_datasets('webqsp')
+        
+        if args.dataset == 'cwq' or args.dataset == 'both':
+            print("\n=== CWQ Raw Dataset Download ===")
+            download_raw_datasets('cwq')
+            
+        print("\n✅ Raw dataset download complete")
+        return
+        
+    # Normal preview mode
     print("This tool checks for datasets and displays random examples")
     print(f"Storage paths:")
     print(f"  - Raw downloaded datasets: data_files/datasets/")
