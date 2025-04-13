@@ -35,10 +35,22 @@ def get_dataset(input_file, split, local_dir='data_files/datasets'):
     
     # If not found locally, download and save
     print(f"❌ Dataset not found locally. Downloading {split} set from {input_file}")
-    dataset = load_dataset(input_file, split=split)
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-    save_dataset_to_disk(dataset, local_path)
-    return dataset
+    print(f"This may take some time, please be patient...")
+    try:
+        # Download the dataset
+        dataset = load_dataset(input_file, split=split, verification_mode='no_checks')
+        print(f"✅ Download complete! Saving raw JSON file...")
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        
+        # Save as raw JSON
+        save_dataset_to_disk(dataset, local_path)
+        print(f"✅ Raw JSON saved successfully to {local_path}")
+        return dataset
+    except Exception as e:
+        print(f"❌ Error downloading dataset: {str(e)}")
+        raise
 
 def download_raw_datasets(dataset_name):
     """Download only the raw datasets without processing them"""
