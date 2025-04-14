@@ -14,7 +14,6 @@ class BayesianLinear(nn.Module):
     def __init__(self, in_features, out_features, prior_mean=0, prior_std=1.0):
         super().__init__()
         
-
         
         # Weight means and log-variances (for numerical stability)
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).normal_(0, 0.1))
