@@ -20,14 +20,14 @@ def load_dataset_from_disk(load_path):
         data_dict = json.load(f)
     return Dataset.from_dict(data_dict)
 
-def get_dataset(input_file, split, local_dir='data_files/datasets'):
+def get_dataset(input_file, split, local_dir='data_files/datasets', force_download=False):
     """Get dataset either from disk or download it"""
     # Create filename based on input_file and split
     filename = f"{input_file.replace('/', '_')}_{split}.json"
     local_path = os.path.join(local_dir, filename)
     
     # Try to load from disk first
-    if os.path.exists(local_path):
+    if os.path.exists(local_path) and not force_download:
         print(f"Loading {split} set from {local_path}")
         return load_dataset_from_disk(local_path)
     
@@ -69,6 +69,11 @@ def main(args):
     train_set = get_dataset(input_file, 'train')
     val_set = get_dataset(input_file, 'validation')
     test_set = get_dataset(input_file, 'test')
+    
+    # If download-only flag is set, exit here
+    if args.download_only:
+        print("Download-only mode: Successfully downloaded/verified all datasets")
+        return
 
     entity_identifiers = []
     with open(config['entity_identifier_file'], 'r') as f:
@@ -118,6 +123,8 @@ if __name__ == '__main__':
     parser = ArgumentParser('Text Embedding Pre-Computation for Retrieval')
     parser.add_argument('-d', '--dataset', type=str, required=True, 
                         choices=['webqsp', 'cwq'], help='Dataset name')
+    parser.add_argument('--download-only', action='store_true', 
+                        help='Only download the datasets without computing embeddings')
     args = parser.parse_args()
     
     main(args)
