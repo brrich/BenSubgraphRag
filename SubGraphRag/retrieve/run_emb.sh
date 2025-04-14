@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -n 20
 #SBATCH --gres=gpu:volta:1
-#SBATCH --mem=32G
+#SBATCH --mem=120G
 #SBATCH -o debug_log.txt
 #SBATCH -e debug_err.txt
 

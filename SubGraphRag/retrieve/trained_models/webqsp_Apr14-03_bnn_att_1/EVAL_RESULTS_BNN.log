@@ -1,0 +1,15 @@
+/var/spool/slurmd/job222988/slurm_script: line 8: module: command not found
+starting experiment
+
+Uncertainty Metrics:
+Mean Uncertainty: 30.7138
+Max Uncertainty: 79.8561
+Top-10 Uncertainty: 24.8445
+
+Evaluation Results:
+  K  ans_recall  shortest_path_triple_recall  gpt_triple_recall  uncertainty_correct_ratio
+ 50       0.257                        0.221              0.205                      1.253
+100       0.370                        0.331              0.301                      1.254
+200       0.525                        0.469              0.417                      1.227
+400       0.703                        0.638              0.562                      1.186
+done

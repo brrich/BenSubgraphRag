@@ -1,0 +1,8 @@
+/var/spool/slurmd/job213165/slurm_script: line 8: module: command not found
+starting experiment
+  K  ans_recall  shortest_path_triple_recall  gpt_triple_recall
+ 50       0.899                        0.833              0.802
+100       0.940                        0.889              0.859
+200       0.969                        0.933              0.914
+400       0.985                        0.967              0.959
+done

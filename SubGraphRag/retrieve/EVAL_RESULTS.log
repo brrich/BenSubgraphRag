@@ -1,4 +1,0 @@
-/var/spool/slurmd/job213134/slurm_script: line 8: module: command not found
-starting experiment
-python: can't open file '/home/gridsan/brich/subgraphrag/BenSubgraphRag/SubGraphRag/retrieve/eval_uncertain.py': [Errno 2] No such file or directory
-done
