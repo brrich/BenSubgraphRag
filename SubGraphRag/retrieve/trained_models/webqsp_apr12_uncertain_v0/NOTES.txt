@@ -1,0 +1,9 @@
+okay some notes on this one
+this was the first go at an uncertainty aware model
+it uses several dropout layers with dropout rates between 0.1 and 0.2
+it takes the mean value as the actual approximated value. 
+
+I think that its proba  mis-approximation of uncertainty? But it did seem to train. I think it trained slower but eventually got to p much the same
+accuracy as the default model. 
+
+Also note I added some layers / complexity to the MLP. 
