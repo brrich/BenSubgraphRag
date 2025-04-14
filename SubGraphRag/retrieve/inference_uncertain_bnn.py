@@ -132,7 +132,7 @@ if __name__ == '__main__':
                         help='Path to a saved model checkpoint, e.g., webqsp_Nov08-01:14:47/cpt.pth')
     parser.add_argument('--max_K', type=int, default=500,
                         help='K in top-K triple retrieval')
-    parser.add_argument('--mc_samples', type=int, default=20,
+    parser.add_argument('--mc_samples', type=int, default=100,
                         help='Number of Monte Carlo Bayesian forward passes (default: 20)')
     args = parser.parse_args()
     
