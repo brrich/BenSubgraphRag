@@ -383,7 +383,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-d', '--dataset', type=str, required=True, 
                         choices=['webqsp', 'cwq'], help='Dataset name')
-    parser.add_argument('--mc_samples', type=int, default=100, 
+    parser.add_argument('--mc_samples', type=int, default=15, 
                        help='Number of Monte Carlo samples for uncertainty estimation (default: 100)')
     parser.add_argument('--num_epochs', type=int, default=None,
                        help='Number of training epochs (overrides config)')
