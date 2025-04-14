@@ -14,8 +14,6 @@ class BayesianLinear(nn.Module):
     def __init__(self, in_features, out_features, prior_mean=0, prior_std=1.0):
         super().__init__()
         
-
-        
         # Weight means and log-variances (for numerical stability)
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).normal_(0, 0.1))
         self.weight_rho = nn.Parameter(torch.Tensor(out_features, in_features).normal_(-3, 0.1))
@@ -56,11 +54,29 @@ class BayesianLinear(nn.Module):
     
     def _log_gaussian(self, x, mean, std):
         """Log density of a Gaussian."""
-        return -0.5 * math.log(2 * math.pi) - torch.log(std) - (x - mean)**2 / (2 * std**2)
+        # Ensure std is a tensor with the same device as x
+        if not isinstance(std, torch.Tensor):
+            std = torch.tensor(std, device=x.device, dtype=x.dtype)
+        
+        # Handle scalar mean
+        if not isinstance(mean, torch.Tensor):
+            mean = torch.tensor(mean, device=x.device, dtype=x.dtype)
+            
+        # If mean is a scalar tensor but x is not, expand mean
+        if mean.dim() == 0 and x.dim() > 0:
+            mean = mean.expand_as(x)
+        
+        # If std is a scalar tensor but x is not, expand std
+        if std.dim() == 0 and x.dim() > 0:
+            std = std.expand_as(x)
+            
+        log_term = -0.5 * torch.log(torch.tensor(2 * math.pi, device=x.device, dtype=x.dtype))
+        return log_term - torch.log(std) - (x - mean)**2 / (2 * std**2)
     
     def _log_gaussian_posterior(self, x, mu, sigma):
         """Log density of a Gaussian posterior."""
-        return -0.5 * math.log(2 * math.pi) - torch.log(sigma) - (x - mu)**2 / (2 * sigma**2)
+        # Both mu and sigma should be tensors already, but handling just in case
+        return self._log_gaussian(x, mu, sigma)
     
     def kl_divergence(self):
         """
