@@ -8,41 +8,48 @@ from torch_geometric.nn import MessagePassing
 # Bayesian Neural Network components
 class BayesianLinear(nn.Module):
     """
-    Bayesian Linear Layer with direct standard deviation parameterization.
+    Bayesian Linear Layer with softplus reparameterization for standard deviation.
     Uses mean-field Gaussian approximation for the posterior.
     """
     def __init__(self, in_features, out_features):
         super().__init__()
 
-        # Initialize mean and standard deviation parameters directly
+        # Initialize mean parameters directly
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features))
-        self.weight_sigma = nn.Parameter(torch.Tensor(out_features, in_features))
+        # Initialize rho parameters (will be transformed to sigma via softplus)
+        self.weight_rho = nn.Parameter(torch.Tensor(out_features, in_features))
 
         self.bias_mu = nn.Parameter(torch.Tensor(out_features))
-        self.bias_sigma = nn.Parameter(torch.Tensor(out_features))
+        self.bias_rho = nn.Parameter(torch.Tensor(out_features))
 
         self.reset_parameters()
 
-    def reset_parameters(self):
-        # Initialize with small values for stable training
-        nn.init.normal_(self.weight_mu, mean=0, std=0.01)
-        nn.init.normal_(self.weight_sigma, mean=0, std=0.01)
-        nn.init.normal_(self.bias_mu, mean=0, std=0.01)
-        nn.init.normal_(self.bias_sigma, mean=0, std=0.01)
+        # Small constant for numerical stability
+        self.epsilon = 1e-8
 
-        # Ensure positive standard deviations
-        with torch.no_grad():
-            self.weight_sigma.abs_()
-            self.bias_sigma.abs_()
+    def reset_parameters(self):
+        # Initialize mean with small values
+        nn.init.normal_(self.weight_mu, mean=0, std=0.01)
+        nn.init.normal_(self.bias_mu, mean=0, std=0.01)
+
+        # Initialize rho to achieve sigma around 0.1-0.2 after softplus
+        # For softplus, we need rho ≈ log(exp(sigma)-1)
+        # To get sigma=0.1, we initialize with approximately -2.3
+        nn.init.constant_(self.weight_rho, -2.3)
+        nn.init.constant_(self.bias_rho, -2.3)
 
     def forward(self, x):
+        # Get sigma through softplus transformation - always positive by construction
+        weight_sigma = F.softplus(self.weight_rho)
+        bias_sigma = F.softplus(self.bias_rho)
+
         # Sample epsilon from standard normal
         weight_epsilon = torch.randn_like(self.weight_mu)
         bias_epsilon = torch.randn_like(self.bias_mu)
 
         # Sample weights and bias using reparameterization trick
-        weight = self.weight_mu + weight_epsilon * self.weight_sigma
-        bias = self.bias_mu + bias_epsilon * self.bias_sigma
+        weight = self.weight_mu + weight_epsilon * weight_sigma
+        bias = self.bias_mu + bias_epsilon * bias_sigma
 
         # Standard linear transform
         return F.linear(x, weight, bias)
@@ -57,14 +64,18 @@ class BayesianLinear(nn.Module):
         and a standard normal prior, the KL divergence is:
         KL(N(μ, σ^2) || N(0, 1)) = 0.5 * (μ^2 + σ^2 - log(σ^2) - 1)
         """
-        # KL divergence for weights
+        # Get sigma through softplus transformation
+        weight_sigma = F.softplus(self.weight_rho)
+        bias_sigma = F.softplus(self.bias_rho)
+
+        # KL divergence for weights with improved numerical stability
         kl_weights = 0.5 * torch.sum(
-            self.weight_mu**2 + self.weight_sigma**2 - torch.log(self.weight_sigma**2) - 1
+            self.weight_mu**2 + weight_sigma**2 - torch.log(weight_sigma**2 + self.epsilon) - 1
         )
 
-        # KL divergence for biases
+        # KL divergence for biases with improved numerical stability
         kl_biases = 0.5 * torch.sum(
-            self.bias_mu**2 + self.bias_sigma**2 - torch.log(self.bias_sigma**2) - 1
+            self.bias_mu**2 + bias_sigma**2 - torch.log(bias_sigma**2 + self.epsilon) - 1
         )
 
         return kl_weights + kl_biases
@@ -121,7 +132,7 @@ class DDE(nn.Module):
 
 class BayesianMLP(nn.Module):
     """
-    Simplified Bayesian MLP matching original architecture more closely
+    Bayesian MLP with improved stability using softplus-based BayesianLinear layers
     """
     def __init__(self, input_size, output_size, hidden_size):
         super().__init__()
@@ -163,7 +174,7 @@ class Retriever(nn.Module):
             pred_in_size += 2 * 2
         pred_in_size += 2 * 2 * (DDE_kwargs['num_rounds'] + DDE_kwargs['num_reverse_rounds'])
 
-
+        # Using the improved BayesianLinear layers with softplus reparameterization
         self.pred = nn.Sequential(
             BayesianLinear(pred_in_size, emb_size*2),
             nn.ReLU(),
@@ -174,9 +185,9 @@ class Retriever(nn.Module):
             BayesianLinear(emb_size//2, 1)
         )
 
-        # Beta term for KL divergence annealing
-        self.kl_beta = 0.01  # Start much lower
-        self.kl_beta_step = 0.01  # Increase much more slowly
+        # Beta term for KL divergence annealing - adjusted for more stable training
+        self.kl_beta = 0.001  # Start even lower
+        self.kl_beta_step = 0.005  # Increase more gradually
         self.max_beta = 1.0
 
     def get_kl_divergence(self):
@@ -240,4 +251,4 @@ class Retriever(nn.Module):
         ], dim=1)
 
         # Multiple forward passes during training/inference
-        return self.pred(h_triple, self.num_samples)
+        return self.pred(h_triple)
