@@ -13,6 +13,5 @@ echo "starting experiment"
 export WANDB_API_KEY="ba2696a6f8ac298d5721f772e8a8e434da8675bc"
 WANDB_MODE=offline
 
-python inference.py -p trained_model_webqsp_subgraphrag_default/webqsp_Apr03-02:13:18/cpt.pth
-
+python inference.py -p trained_models/cwq_Apr14-16:46:15/cpt.pth
 echo "done"

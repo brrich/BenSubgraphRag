@@ -1,0 +1,12 @@
+/var/spool/slurmd/job227325/slurm_script: line 8: module: command not found
+starting experiment
+/home/gridsan/brich/.conda/envs/retriever/lib/python3.10/site-packages/numpy/core/fromnumeric.py:3504: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/home/gridsan/brich/.conda/envs/retriever/lib/python3.10/site-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+  K  ans_recall  shortest_path_triple_recall  gpt_triple_recall
+ 50       0.869                        0.716                NaN
+100       0.919                        0.805                NaN
+200       0.954                        0.880                NaN
+400       0.978                        0.934                NaN
+done
