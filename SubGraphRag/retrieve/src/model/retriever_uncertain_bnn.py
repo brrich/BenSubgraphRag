@@ -8,44 +8,67 @@ from torch_geometric.nn import MessagePassing
 # Bayesian Neural Network components
 class BayesianLinear(nn.Module):
     """
-    Bayesian Linear Layer with weight and bias posterior distributions.
+    Bayesian Linear Layer with direct standard deviation parameterization.
     Uses mean-field Gaussian approximation for the posterior.
     """
     def __init__(self, in_features, out_features):
         super().__init__()
-        
-        # Initialize mean and rho (transformed to std) parameters
-        self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).normal_(0, 0.2))
-        self.weight_rho = nn.Parameter(torch.Tensor(out_features, in_features).normal_(-3, 0.1))
-        
-        self.bias_mu = nn.Parameter(torch.Tensor(out_features).normal_(0, 0.2))
-        self.bias_rho = nn.Parameter(torch.Tensor(out_features).normal_(-3, 0.1))
-        
+
+        # Initialize mean and standard deviation parameters directly
+        self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features))
+        self.weight_sigma = nn.Parameter(torch.Tensor(out_features, in_features))
+
+        self.bias_mu = nn.Parameter(torch.Tensor(out_features))
+        self.bias_sigma = nn.Parameter(torch.Tensor(out_features))
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        # Initialize with small values for stable training
+        nn.init.normal_(self.weight_mu, mean=0, std=0.01)
+        nn.init.normal_(self.weight_sigma, mean=0, std=0.01)
+        nn.init.normal_(self.bias_mu, mean=0, std=0.01)
+        nn.init.normal_(self.bias_sigma, mean=0, std=0.01)
+
+        # Ensure positive standard deviations
+        with torch.no_grad():
+            self.weight_sigma.abs_()
+            self.bias_sigma.abs_()
+
     def forward(self, x):
-        # Get standard deviation through softplus
-        weight_sigma = F.softplus(self.weight_rho)
-        bias_sigma = F.softplus(self.bias_rho)
-        
         # Sample epsilon from standard normal
         weight_epsilon = torch.randn_like(self.weight_mu)
         bias_epsilon = torch.randn_like(self.bias_mu)
-        
+
         # Sample weights and bias using reparameterization trick
-        weight = self.weight_mu + weight_epsilon * weight_sigma
-        bias = self.bias_mu + bias_epsilon * bias_sigma
-        
+        weight = self.weight_mu + weight_epsilon * self.weight_sigma
+        bias = self.bias_mu + bias_epsilon * self.bias_sigma
+
         # Standard linear transform
         return F.linear(x, weight, bias)
-    
+
     def kl_divergence(self):
-        """KL divergence between posterior and prior"""
-        weight_sigma = F.softplus(self.weight_rho)
-        bias_sigma = F.softplus(self.bias_rho)
-        
-        kl_weight = 0.5 * (weight_sigma.pow(2) + self.weight_mu.pow(2) - 2 * torch.log(weight_sigma) - 1).sum()
-        kl_bias = 0.5 * (bias_sigma.pow(2) + self.bias_mu.pow(2) - 2 * torch.log(bias_sigma) - 1).sum()
-        
-        return kl_weight + kl_bias
+        """
+        Calculate KL divergence between the posterior and prior distributions.
+        Prior: N(0, 1)
+        Posterior: N(weight_mu, weight_sigma^2) and N(bias_mu, bias_sigma^2)
+
+        For a Gaussian posterior with mean μ and standard deviation σ,
+        and a standard normal prior, the KL divergence is:
+        KL(N(μ, σ^2) || N(0, 1)) = 0.5 * (μ^2 + σ^2 - log(σ^2) - 1)
+        """
+        # KL divergence for weights
+        kl_weights = 0.5 * torch.sum(
+            self.weight_mu**2 + self.weight_sigma**2 - torch.log(self.weight_sigma**2) - 1
+        )
+
+        # KL divergence for biases
+        kl_biases = 0.5 * torch.sum(
+            self.bias_mu**2 + self.bias_sigma**2 - torch.log(self.bias_sigma**2) - 1
+        )
+
+        return kl_weights + kl_biases
+
 
 
 class PEConv(MessagePassing):
@@ -66,15 +89,15 @@ class DDE(nn.Module):
         num_reverse_rounds
     ):
         super().__init__()
-        
+
         self.layers = nn.ModuleList()
         for _ in range(num_rounds):
             self.layers.append(PEConv())
-        
+
         self.reverse_layers = nn.ModuleList()
         for _ in range(num_reverse_rounds):
             self.reverse_layers.append(PEConv())
-    
+
     def forward(
         self,
         topic_entity_one_hot,
@@ -82,17 +105,17 @@ class DDE(nn.Module):
         reverse_edge_index
     ):
         result_list = []
-        
+
         h_pe = topic_entity_one_hot
         for layer in self.layers:
             h_pe = layer(edge_index, h_pe)
             result_list.append(h_pe)
-        
+
         h_pe_rev = topic_entity_one_hot
         for layer in self.reverse_layers:
             h_pe_rev = layer(reverse_edge_index, h_pe_rev)
             result_list.append(h_pe_rev)
-        
+
         return result_list
 
 
@@ -102,10 +125,10 @@ class BayesianMLP(nn.Module):
     """
     def __init__(self, input_size, output_size, hidden_size):
         super().__init__()
-        
+
         self.fc1 = BayesianLinear(input_size, hidden_size)
         self.fc2 = BayesianLinear(hidden_size, output_size)
-    
+
     def forward(self, x, num_samples=1):
         outputs = []
         for _ in range(num_samples):
@@ -113,9 +136,9 @@ class BayesianMLP(nn.Module):
             out = F.relu(out)
             out = self.fc2(out)
             outputs.append(out)
-        
+
         return torch.stack(outputs).mean(0) if num_samples > 1 else outputs[0]
-    
+
     def kl_divergence(self):
         return self.fc1.kl_divergence() + self.fc2.kl_divergence()
 
@@ -129,28 +152,46 @@ class Retriever(nn.Module):
         num_samples=5  # Number of MC samples during forward pass
     ):
         super().__init__()
-        
+
         self.non_text_entity_emb = nn.Embedding(1, emb_size)
         self.topic_pe = topic_pe
         self.dde = DDE(**DDE_kwargs)
         self.num_samples = num_samples
-        
+
         pred_in_size = 4 * emb_size
         if topic_pe:
             pred_in_size += 2 * 2
         pred_in_size += 2 * 2 * (DDE_kwargs['num_rounds'] + DDE_kwargs['num_reverse_rounds'])
 
-        # Simplified Bayesian predictor matching original architecture
-        self.pred = BayesianMLP(
-            input_size=pred_in_size,
-            hidden_size=emb_size,  # Match original architecture
-            output_size=1
+
+        self.pred = nn.Sequential(
+            BayesianLinear(pred_in_size, emb_size*2),
+            nn.ReLU(),
+            BayesianLinear(emb_size*2, emb_size),
+            nn.ReLU(),
+            BayesianLinear(emb_size, emb_size//2),
+            nn.ReLU(),
+            BayesianLinear(emb_size//2, 1)
         )
-        
+
         # Beta term for KL divergence annealing
-        self.kl_beta = 0.1
-        self.kl_beta_step = 0.1  # Increment per epoch
+        self.kl_beta = 0.01  # Start much lower
+        self.kl_beta_step = 0.01  # Increase much more slowly
         self.max_beta = 1.0
+
+    def get_kl_divergence(self):
+        """
+        Calculate total KL divergence of all Bayesian layers in the model.
+        This is called in elbo_loss function.
+        """
+        kl_div = 0.0
+
+        # Sum KL divergence from all BayesianLinear layers in self.pred
+        for layer in self.pred:
+            if isinstance(layer, BayesianLinear):
+                kl_div += layer.kl_divergence()
+
+        return kl_div
 
     def forward(
         self,
@@ -164,7 +205,7 @@ class Retriever(nn.Module):
         topic_entity_one_hot
     ):
         device = entity_embs.device
-        
+
         h_e = torch.cat(
             [
                 entity_embs,
@@ -197,21 +238,6 @@ class Retriever(nn.Module):
             h_r,
             h_e[t_id_tensor]
         ], dim=1)
-        
+
         # Multiple forward passes during training/inference
         return self.pred(h_triple, self.num_samples)
-    
-    def get_kl_divergence(self):
-        """Return the scaled KL divergence for ELBO loss"""
-        return self.kl_beta * self.pred.kl_divergence()
-    
-    def update_kl_beta(self):
-        """Update beta term for KL annealing"""
-        self.kl_beta = min(self.kl_beta + self.kl_beta_step, self.max_beta)
-
-    # Not needed anymore since we're using actual Bayesian inference
-    # instead of MC dropout
-    def eval(self):
-        # Just call the parent method - we don't need to keep any layers in train mode
-        super().eval()
-        return self
