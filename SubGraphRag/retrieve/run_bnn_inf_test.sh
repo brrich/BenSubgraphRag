@@ -4,6 +4,7 @@
 #SBATCH -n 20
 #SBATCH --gres=gpu:volta:1
 #SBATCH -o bnn_inference_test.sh.log-%j
+#SBATCH -e debug_err.txt
 
 module load anaconda/2023a-pytorch
 source activate retriever
