@@ -1,0 +1,11 @@
+/var/spool/slurmd/job474298/slurm_script: line 8: module: command not found
+starting experiment
+Traceback (most recent call last):
+  File "/home/gridsan/brich/subgraphrag/BenSubgraphRag/SubGraphRag/retrieve/eval_uncertain_bnn.py", line 153, in <module>
+    main(args)
+  File "/home/gridsan/brich/subgraphrag/BenSubgraphRag/SubGraphRag/retrieve/eval_uncertain_bnn.py", line 101, in main
+    'gpt_triple_recall': [
+  File "/home/gridsan/brich/subgraphrag/BenSubgraphRag/SubGraphRag/retrieve/eval_uncertain_bnn.py", line 102, in <listcomp>
+    round(metric_dict[f'gpt_triple_recall@{k}'], 3) for k in k_list
+TypeError: type list doesn't define __round__ method
+done

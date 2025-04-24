@@ -1,7 +1,0 @@
-/var/spool/slurmd/job259042/slurm_script: line 9: module: command not found
-  0%|          | 0/1639 [00:00<?, ?it/s] 22%|██▏       | 359/1639 [00:00<00:01, 963.19it/s]100%|██████████| 1639/1639 [00:00<00:00, 3535.27it/s]
-Running MC samples:   0%|          | 0/5 [00:00<?, ?it/s]Running MC samples: 100%|██████████| 5/5 [00:00<00:00, 82.66it/s]
-Running MC samples:   0%|          | 0/5 [00:00<?, ?it/s]Running MC samples: 100%|██████████| 5/5 [00:00<00:00, 89.20it/s]
-Running MC samples:   0%|          | 0/5 [00:00<?, ?it/s]Running MC samples: 100%|██████████| 5/5 [00:00<00:00, 76.44it/s]
-Running MC samples:   0%|          | 0/5 [00:00<?, ?it/s]Running MC samples: 100%|██████████| 5/5 [00:00<00:00, 96.35it/s]
-Running MC samples:   0%|          | 0/5 [00:00<?, ?it/s]Running MC samples: 100%|██████████| 5/5 [00:00<00:00, 95.71it/s]
