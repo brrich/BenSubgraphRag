@@ -17,6 +17,13 @@ from src.dataset.retriever import RetrieverDataset, collate_retriever
 from src.model.retriever import Retriever
 from src.setup import set_seed, prepare_sample
 
+# TOOD: follow grok advice on making sure it's actually a valid uncertainty metric
+# in particular, look into the choice of dropout rate (suggested 0.5 for classification, 0.1 to 0.2 for regression.. which are we??)
+
+# NOTE: also look at the precision parameter and weight decay... 
+# ig a L2 regularization with weight decay lambda is added to the loss fcn to correspond to tthe prior over weights in the Bayesian framework?
+# whatever tf that means. the choice of lambda influences the balnace between fitting the data and regularizing the model. 
+
 @torch.no_grad()
 def eval_epoch(config, device, data_loader, model, mc_samples=10):
     model.eval()  # This calls our custom eval() that keeps dropout active
