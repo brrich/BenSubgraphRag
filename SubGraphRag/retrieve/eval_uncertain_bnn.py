@@ -109,14 +109,14 @@ def main(args):
     if is_bnn:
         # Add uncertainty correlation metric
         table_dict['uncertainty_correct_ratio'] = [
-            round(metric_dict.get(f'uncertainty_correct_ratio@{k}', 0), 3) for k in k_list
+            round(metric_dict.get(f'uncertainty_correct_ratio@{k}', 0.0), 3) for k in k_list
         ]
 
         # Print overall uncertainty metrics
         print("\nUncertainty Metrics:")
-        print(f"Mean Uncertainty: {metric_dict.get('mean_uncertainty', 0):.4f}")
-        print(f"Max Uncertainty: {metric_dict.get('max_uncertainty', 0):.4f}")
-        print(f"Top-10 Uncertainty: {metric_dict.get('top_10_uncertainty', 0):.4f}")
+        print(f"Mean Uncertainty: {metric_dict.get('mean_uncertainty', 0.0):.4f}")
+        print(f"Max Uncertainty: {metric_dict.get('max_uncertainty', 0.0):.4f}")
+        print(f"Top-10 Uncertainty: {metric_dict.get('top_10_uncertainty', 0.0):.4f}")
 
     df = pd.DataFrame(table_dict)
     print("\nEvaluation Results:")
