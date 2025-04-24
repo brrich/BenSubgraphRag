@@ -13,5 +13,5 @@ echo "starting experiment"
 export WANDB_API_KEY="ba2696a6f8ac298d5721f772e8a8e434da8675bc"
 WANDB_MODE=offline
 
-python inference_uncertain_bnn.py -p webqsp_Apr15-21:21:51/cpt.pth
+python inference_uncertain_bnn.py -p cwq_Apr23-04:49:49/cpt.pth
 echo "done"
