@@ -13,6 +13,7 @@ def main(args):
     # Check if this is a BNN result file
     is_bnn = 'bnn' in os.path.basename(args.path)
 
+    # Initialize metric_dict with default values
     metric_dict = dict()
     for k in k_list:
         metric_dict[f'ans_recall@{k}'] = []
@@ -29,6 +30,7 @@ def main(args):
         metric_dict['max_uncertainty'] = []
         metric_dict['top_10_uncertainty'] = []
 
+    # Process all samples
     for sample_id in pred_dict:
         if len(pred_dict[sample_id]['scored_triples']) == 0:
             continue
@@ -84,60 +86,99 @@ def main(args):
                     len(gpt_triples & triples_k) / len(gpt_triples)
                 )
 
-    # Calculate final metrics
+    # Calculate final metrics and ensure all values are scalar
     for metric, val in metric_dict.items():
-        if val:  # Only calculate for non-empty lists
-            metric_dict[metric] = np.mean(val)
-        else:  # Handle empty lists
-            metric_dict[metric] = 0.0
+        try:
+            if val:  # Only calculate for non-empty lists
+                metric_dict[metric] = float(np.mean(val))
+            else:  # Handle empty lists
+                metric_dict[metric] = 0.0
+        except Exception as e:
+            print(f"Warning: Error processing metric {metric}: {e}")
+            metric_dict[metric] = 0.0  # Fallback to 0.0 on error
 
-    # Create results table
-    table_dict = {
-        'K': k_list,
-        'ans_recall': [
-            round(metric_dict.get(f'ans_recall@{k}', 0.0), 3) for k in k_list
-        ],
-        'shortest_path_triple_recall': [
-            round(metric_dict.get(f'shortest_path_triple_recall@{k}', 0.0), 3) for k in k_list
-        ],
-        'gpt_triple_recall': [
-            round(metric_dict.get(f'gpt_triple_recall@{k}', 0.0), 3) for k in k_list
-        ]
-    }
+    # Create results table with safe values
+    try:
+        table_dict = {
+            'K': k_list,
+            'ans_recall': [],
+            'shortest_path_triple_recall': [],
+            'gpt_triple_recall': []
+        }
 
-    # Add uncertainty metrics for BNN results
-    if is_bnn:
-        # Add uncertainty correlation metric
-        table_dict['uncertainty_correct_ratio'] = [
-            round(metric_dict.get(f'uncertainty_correct_ratio@{k}', 0.0), 3) for k in k_list
-        ]
+        # Safely populate metrics
+        for k in k_list:
+            try:
+                table_dict['ans_recall'].append(
+                    round(float(metric_dict.get(f'ans_recall@{k}', 0.0)), 3))
+            except:
+                table_dict['ans_recall'].append(0.0)
 
-        # Print overall uncertainty metrics
-        print("\nUncertainty Metrics:")
-        print(f"Mean Uncertainty: {metric_dict.get('mean_uncertainty', 0.0):.4f}")
-        print(f"Max Uncertainty: {metric_dict.get('max_uncertainty', 0.0):.4f}")
-        print(f"Top-10 Uncertainty: {metric_dict.get('top_10_uncertainty', 0.0):.4f}")
+            try:
+                table_dict['shortest_path_triple_recall'].append(
+                    round(float(metric_dict.get(f'shortest_path_triple_recall@{k}', 0.0)), 3))
+            except:
+                table_dict['shortest_path_triple_recall'].append(0.0)
 
-    df = pd.DataFrame(table_dict)
-    print("\nEvaluation Results:")
-    print(df.to_string(index=False))
+            try:
+                table_dict['gpt_triple_recall'].append(
+                    round(float(metric_dict.get(f'gpt_triple_recall@{k}', 0.0)), 3))
+            except:
+                table_dict['gpt_triple_recall'].append(0.0)
 
-    # Save results if requested
-    if args.save_results:
-        # Create results directory
-        results_dir = os.path.join(os.path.dirname(args.path), "eval_results")
-        os.makedirs(results_dir, exist_ok=True)
+        # Add uncertainty metrics for BNN results
+        if is_bnn:
+            table_dict['uncertainty_correct_ratio'] = []
+            for k in k_list:
+                try:
+                    table_dict['uncertainty_correct_ratio'].append(
+                        round(float(metric_dict.get(f'uncertainty_correct_ratio@{k}', 0.0)), 3))
+                except:
+                    table_dict['uncertainty_correct_ratio'].append(0.0)
 
-        # Generate result filename
-        result_filename = f"eval_results_{'bnn_' if is_bnn else ''}{os.path.basename(args.path).split('.')[0]}.csv"
-        df.to_csv(os.path.join(results_dir, result_filename), index=False)
+            # Print overall uncertainty metrics
+            print("\nUncertainty Metrics:")
+            try:
+                print(f"Mean Uncertainty: {float(metric_dict.get('mean_uncertainty', 0.0)):.4f}")
+                print(f"Max Uncertainty: {float(metric_dict.get('max_uncertainty', 0.0)):.4f}")
+                print(f"Top-10 Uncertainty: {float(metric_dict.get('top_10_uncertainty', 0.0)):.4f}")
+            except Exception as e:
+                print(f"Error printing uncertainty metrics: {e}")
 
-        # Save all metrics to a JSON file
-        import json
-        with open(os.path.join(results_dir, f"all_metrics_{'bnn_' if is_bnn else ''}{os.path.basename(args.path).split('.')[0]}.json"), 'w') as f:
-            json.dump(metric_dict, f, indent=2)
+        df = pd.DataFrame(table_dict)
+        print("\nEvaluation Results:")
+        print(df.to_string(index=False))
 
-        print(f"\nResults saved to {results_dir}")
+        # Save results if requested
+        if args.save_results:
+            # Create results directory
+            results_dir = os.path.join(os.path.dirname(args.path), "eval_results")
+            os.makedirs(results_dir, exist_ok=True)
+
+            # Generate result filename
+            result_filename = f"eval_results_{'bnn_' if is_bnn else ''}{os.path.basename(args.path).split('.')[0]}.csv"
+            df.to_csv(os.path.join(results_dir, result_filename), index=False)
+
+            # Save all metrics to a JSON file
+            import json
+            with open(os.path.join(results_dir, f"all_metrics_{'bnn_' if is_bnn else ''}{os.path.basename(args.path).split('.')[0]}.json"), 'w') as f:
+                # Ensure all values are JSON serializable
+                serializable_metrics = {}
+                for k, v in metric_dict.items():
+                    try:
+                        if isinstance(v, (list, np.ndarray)):
+                            serializable_metrics[k] = float(np.mean(v)) if len(v) > 0 else 0.0
+                        else:
+                            serializable_metrics[k] = float(v)
+                    except:
+                        serializable_metrics[k] = 0.0
+                json.dump(serializable_metrics, f, indent=2)
+
+            print(f"\nResults saved to {results_dir}")
+    except Exception as e:
+        print(f"Error in creating results table: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
