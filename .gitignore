@@ -1,6 +1,6 @@
 **/__pycache__
 wandb
-*.pth
+
 retrieve/data_files
 model_cache/
 
