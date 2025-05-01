@@ -1,0 +1,17 @@
+{
+  "epoch": 24,
+  "metrics": {
+    "triple_recall@100": 0.6248310937451137,
+    "ans_recall@100": 0.6621989494772025
+  },
+  "uncertainty": {
+    "mean_std": 1.7488734492888818,
+    "max_std": 2.670832278382065,
+    "uncertainty_correctness_corr": -0.023781513248502605,
+    "top100_uncertainty": 1.5967262983322144
+  },
+  "test_metrics": {
+    "triple_recall@100": 0.5980754185315931,
+    "ans_recall@100": 0.6438929072646656
+  }
+}
